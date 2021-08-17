@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.1.0
 // - protoc             v3.6.1
-// source: src/dew/protocol/grpc.proto
+// source: protocol/grpc.proto
 
 package protocol
 
@@ -23,6 +23,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type HelloServiceClient interface {
 	SayHello(ctx context.Context, in *UserNameMessage, opts ...grpc.CallOption) (*HelloMessage, error)
+	SendPicture(ctx context.Context, opts ...grpc.CallOption) (HelloService_SendPictureClient, error)
 }
 
 type helloServiceClient struct {
@@ -42,11 +43,46 @@ func (c *helloServiceClient) SayHello(ctx context.Context, in *UserNameMessage, 
 	return out, nil
 }
 
+func (c *helloServiceClient) SendPicture(ctx context.Context, opts ...grpc.CallOption) (HelloService_SendPictureClient, error) {
+	stream, err := c.cc.NewStream(ctx, &HelloService_ServiceDesc.Streams[0], "/protocol.HelloService/SendPicture", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &helloServiceSendPictureClient{stream}
+	return x, nil
+}
+
+type HelloService_SendPictureClient interface {
+	Send(*Picture) error
+	CloseAndRecv() (*Response, error)
+	grpc.ClientStream
+}
+
+type helloServiceSendPictureClient struct {
+	grpc.ClientStream
+}
+
+func (x *helloServiceSendPictureClient) Send(m *Picture) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *helloServiceSendPictureClient) CloseAndRecv() (*Response, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(Response)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // HelloServiceServer is the server API for HelloService service.
 // All implementations must embed UnimplementedHelloServiceServer
 // for forward compatibility
 type HelloServiceServer interface {
 	SayHello(context.Context, *UserNameMessage) (*HelloMessage, error)
+	SendPicture(HelloService_SendPictureServer) error
 	mustEmbedUnimplementedHelloServiceServer()
 }
 
@@ -56,6 +92,9 @@ type UnimplementedHelloServiceServer struct {
 
 func (UnimplementedHelloServiceServer) SayHello(context.Context, *UserNameMessage) (*HelloMessage, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SayHello not implemented")
+}
+func (UnimplementedHelloServiceServer) SendPicture(HelloService_SendPictureServer) error {
+	return status.Errorf(codes.Unimplemented, "method SendPicture not implemented")
 }
 func (UnimplementedHelloServiceServer) mustEmbedUnimplementedHelloServiceServer() {}
 
@@ -88,6 +127,32 @@ func _HelloService_SayHello_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HelloService_SendPicture_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(HelloServiceServer).SendPicture(&helloServiceSendPictureServer{stream})
+}
+
+type HelloService_SendPictureServer interface {
+	SendAndClose(*Response) error
+	Recv() (*Picture, error)
+	grpc.ServerStream
+}
+
+type helloServiceSendPictureServer struct {
+	grpc.ServerStream
+}
+
+func (x *helloServiceSendPictureServer) SendAndClose(m *Response) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *helloServiceSendPictureServer) Recv() (*Picture, error) {
+	m := new(Picture)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // HelloService_ServiceDesc is the grpc.ServiceDesc for HelloService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -100,6 +165,12 @@ var HelloService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _HelloService_SayHello_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
-	Metadata: "src/dew/protocol/grpc.proto",
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "SendPicture",
+			Handler:       _HelloService_SendPicture_Handler,
+			ClientStreams: true,
+		},
+	},
+	Metadata: "protocol/grpc.proto",
 }
